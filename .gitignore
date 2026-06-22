@@ -1,0 +1,26 @@
+# Gradle
+.gradle/
+build/
+**/build/
+local.properties
+.android-sdk/
+
+# Android Studio
+.idea/
+*.iml
+.DS_Store
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Keystore (do not commit signing keys)
+*.jks
+*.keystore
+keystore.properties
+
+# Logs
+*.log
+
+# APK / AAB outputs (CI artifacts are uploaded separately)
+*.apk
+*.aab

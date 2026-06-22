@@ -1,0 +1,18 @@
+<resources>
+    <string name="app_name">收藏派发器</string>
+    <string name="app_title">收藏链接自动派发</string>
+    <string name="status_idle">状态：未监听</string>
+    <string name="status_monitoring">状态：正在监听剪贴板</string>
+    <string name="label_monitor">开启剪贴板监听</string>
+    <string name="label_auto_start">开机自动恢复监听</string>
+    <string name="hint_api_endpoint">外部 API 地址</string>
+    <string name="hint_api_token">API Token（可选）</string>
+    <string name="btn_save">保存配置</string>
+    <string name="btn_dispatch_clipboard">手动派发剪贴板</string>
+    <string name="label_history">派发记录</string>
+    <string name="btn_clear_history">清空</string>
+    <string name="empty_history">暂无派发记录。复制链接后会自动识别并派发。</string>
+    <string name="notification_channel_name">剪贴板监听</string>
+    <string name="notification_channel_desc">保持前台服务以监听剪贴板中的分享链接</string>
+    <string name="notification_title">收藏派发器运行中</string>
+</resources>
