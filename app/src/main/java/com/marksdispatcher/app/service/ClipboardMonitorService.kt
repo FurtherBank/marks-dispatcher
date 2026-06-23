@@ -14,9 +14,9 @@ import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import com.marksdispatcher.app.MainActivity
 import com.marksdispatcher.app.R
-import com.marksdispatcher.app.api.DispatchApiClient
 import com.marksdispatcher.app.data.SettingsRepository
 import com.marksdispatcher.app.detector.LinkSourceDetector
+import com.marksdispatcher.app.dispatch.DispatchManager
 import com.marksdispatcher.app.model.DispatchPayload
 import com.marksdispatcher.app.model.DispatchRecord
 import kotlinx.coroutines.CoroutineScope
@@ -31,7 +31,7 @@ class ClipboardMonitorService : Service(), ClipboardManager.OnPrimaryClipChanged
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private lateinit var clipboardManager: ClipboardManager
     private lateinit var settingsRepository: SettingsRepository
-    private val apiClient = DispatchApiClient()
+    private lateinit var dispatchManager: DispatchManager
 
     private var lastProcessedText: String? = null
 
@@ -39,6 +39,7 @@ class ClipboardMonitorService : Service(), ClipboardManager.OnPrimaryClipChanged
         super.onCreate()
         clipboardManager = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         settingsRepository = SettingsRepository(this)
+        dispatchManager = DispatchManager(this)
         createNotificationChannel()
     }
 
@@ -55,10 +56,21 @@ class ClipboardMonitorService : Service(), ClipboardManager.OnPrimaryClipChanged
                 }
                 return START_STICKY
             }
+            ACTION_RETRY_PENDING -> {
+                serviceScope.launch {
+                    val count = dispatchManager.retryPendingQueue()
+                    updateNotification(if (count > 0) "已重发 $count 条" else "暂无待重发")
+                    sendBroadcast(Intent(ACTION_DISPATCH_UPDATED).setPackage(packageName))
+                }
+                return START_STICKY
+            }
         }
 
         startForeground(NOTIFICATION_ID, buildNotification("监听中，复制链接后将自动派发"))
         clipboardManager.addPrimaryClipChangedListener(this)
+        serviceScope.launch {
+            dispatchManager.retryPendingQueue()
+        }
         return START_STICKY
     }
 
@@ -84,34 +96,34 @@ class ClipboardMonitorService : Service(), ClipboardManager.OnPrimaryClipChanged
         lastProcessedText = text
         updateNotification("正在派发: ${source.label}")
 
+        val payload = DispatchPayload(
+            url = url,
+            sourceId = source.id,
+            sourceLabel = source.label,
+            rawText = text,
+            detectedAt = Instant.now().toString()
+        )
+
         serviceScope.launch {
-            val settings = settingsRepository.getSettings()
-            val result = apiClient.dispatch(
-                endpoint = settings.apiEndpoint,
-                token = settings.apiToken,
-                url = url,
-                sourceId = source.id,
-                sourceLabel = source.label,
-                rawText = text
-            )
+            val outcome = dispatchManager.dispatchPayload(payload)
 
             val record = DispatchRecord(
-                payload = DispatchPayload(
-                    url = url,
-                    sourceId = source.id,
-                    sourceLabel = source.label,
-                    rawText = text,
-                    detectedAt = Instant.now().toString()
-                ),
-                success = result.success,
-                message = result.message
+                payload = payload,
+                success = outcome.success,
+                message = outcome.message
             )
-            settingsRepository.appendHistory(record)
+            if (outcome.success) {
+                settingsRepository.appendHistory(record)
+            } else if (!outcome.queuedForRetry) {
+                settingsRepository.appendHistory(record)
+            } else {
+                settingsRepository.appendHistory(record)
+            }
 
-            val statusText = if (result.success) {
+            val statusText = if (outcome.success) {
                 "已派发 ${source.label}"
             } else {
-                "派发失败: ${result.message}"
+                outcome.message
             }
             updateNotification(statusText)
             sendBroadcast(Intent(ACTION_DISPATCH_UPDATED).setPackage(packageName))
@@ -180,6 +192,7 @@ class ClipboardMonitorService : Service(), ClipboardManager.OnPrimaryClipChanged
     companion object {
         const val ACTION_STOP = "com.marksdispatcher.app.action.STOP_MONITOR"
         const val ACTION_DISPATCH_NOW = "com.marksdispatcher.app.action.DISPATCH_NOW"
+        const val ACTION_RETRY_PENDING = "com.marksdispatcher.app.action.RETRY_PENDING"
         const val ACTION_DISPATCH_UPDATED = "com.marksdispatcher.app.action.DISPATCH_UPDATED"
         const val EXTRA_CLIP_TEXT = "extra_clip_text"
 
@@ -204,6 +217,16 @@ class ClipboardMonitorService : Service(), ClipboardManager.OnPrimaryClipChanged
             val intent = Intent(context, ClipboardMonitorService::class.java)
                 .setAction(ACTION_DISPATCH_NOW)
                 .putExtra(EXTRA_CLIP_TEXT, text)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(intent)
+            } else {
+                context.startService(intent)
+            }
+        }
+
+        fun retryPending(context: Context) {
+            val intent = Intent(context, ClipboardMonitorService::class.java)
+                .setAction(ACTION_RETRY_PENDING)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 context.startForegroundService(intent)
             } else {

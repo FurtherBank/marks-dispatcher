@@ -2,8 +2,6 @@ package com.marksdispatcher.app
 
 import android.Manifest
 import android.content.BroadcastReceiver
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -16,14 +14,23 @@ import android.view.ViewGroup
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.marksdispatcher.app.data.SettingsRepository
 import com.marksdispatcher.app.databinding.ActivityMainBinding
+import com.marksdispatcher.app.discovery.DeviceResolver
+import com.marksdispatcher.app.discovery.LanDeviceScanner
+import com.marksdispatcher.app.dispatch.DispatchManager
+import com.marksdispatcher.app.model.DiscoveredDevice
 import com.marksdispatcher.app.model.DispatchRecord
+import com.marksdispatcher.app.model.PairedDevice
 import com.marksdispatcher.app.service.ClipboardMonitorService
+import com.marksdispatcher.app.worker.DispatchRetryWorker
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -33,10 +40,14 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private lateinit var settingsRepository: SettingsRepository
     private lateinit var historyAdapter: HistoryAdapter
+    private val lanScanner = LanDeviceScanner()
+    private lateinit var deviceResolver: DeviceResolver
+    private lateinit var dispatchManager: DispatchManager
 
     private val dispatchUpdateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             refreshHistory()
+            refreshDeviceStatus()
         }
     }
 
@@ -55,9 +66,13 @@ class MainActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         settingsRepository = SettingsRepository(this)
+        deviceResolver = DeviceResolver(this, settingsRepository)
+        dispatchManager = DispatchManager(this)
+
         setupHistoryList()
         loadSettings()
         setupActions()
+        refreshDeviceStatus()
 
         ContextCompat.registerReceiver(
             this,
@@ -71,6 +86,7 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         refreshMonitorUi()
         refreshHistory()
+        refreshDeviceStatus()
     }
 
     override fun onDestroy() {
@@ -90,6 +106,7 @@ class MainActivity : AppCompatActivity() {
         binding.inputApiToken.setText(settings.apiToken)
         binding.switchAutoStart.isChecked = settings.autoStartOnBoot
         binding.switchMonitor.isChecked = settings.monitorEnabled
+        binding.switchUsePairedDevice.isChecked = settings.usePairedDevice
     }
 
     private fun setupActions() {
@@ -103,6 +120,16 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        binding.switchUsePairedDevice.setOnCheckedChangeListener { _, isChecked ->
+            val current = settingsRepository.getSettings()
+            settingsRepository.saveSettings(current.copy(usePairedDevice = isChecked))
+            refreshDeviceStatus()
+        }
+
+        binding.btnScanDevices.setOnClickListener { scanLanDevices() }
+        binding.btnUnpairDevice.setOnClickListener { unpairDevice() }
+        binding.btnRetryPending.setOnClickListener { retryPendingNow() }
+
         binding.btnDispatchClipboard.setOnClickListener { dispatchClipboardManually() }
         binding.btnClearHistory.setOnClickListener {
             settingsRepository.clearHistory()
@@ -112,13 +139,128 @@ class MainActivity : AppCompatActivity() {
 
     private fun saveSettings() {
         val current = settingsRepository.getSettings()
+        val endpointInput = binding.inputApiEndpoint.text?.toString().orEmpty().trim()
+        val endpoint = if (current.usePairedDevice) {
+            current.apiEndpoint
+        } else {
+            endpointInput
+        }
         val updated = current.copy(
-            apiEndpoint = binding.inputApiEndpoint.text?.toString().orEmpty().trim(),
+            apiEndpoint = endpoint,
             apiToken = binding.inputApiToken.text?.toString().orEmpty().trim(),
-            autoStartOnBoot = binding.switchAutoStart.isChecked
+            autoStartOnBoot = binding.switchAutoStart.isChecked,
+            usePairedDevice = binding.switchUsePairedDevice.isChecked
         )
         settingsRepository.saveSettings(updated)
         Toast.makeText(this, "配置已保存", Toast.LENGTH_SHORT).show()
+        refreshDeviceStatus()
+    }
+
+    private fun scanLanDevices() {
+        binding.btnScanDevices.isEnabled = false
+        binding.deviceStatusText.text = getString(R.string.device_scanning)
+        lifecycleScope.launch {
+            val result = lanScanner.scan()
+            binding.btnScanDevices.isEnabled = true
+            if (result.devices.isEmpty()) {
+                binding.deviceStatusText.text = getString(
+                    R.string.device_scan_empty,
+                    result.subnet ?: "unknown"
+                )
+                Toast.makeText(this@MainActivity, R.string.toast_scan_empty, Toast.LENGTH_LONG).show()
+                return@launch
+            }
+            showDevicePicker(result.devices)
+        }
+    }
+
+    private fun showDevicePicker(devices: List<DiscoveredDevice>) {
+        val labels = devices.map { "${it.deviceName} (${it.ip}:${it.port})" }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle(R.string.dialog_pick_device_title)
+            .setItems(labels) { _, which ->
+                pairDevice(devices[which])
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun pairDevice(device: DiscoveredDevice) {
+        val token = binding.inputApiToken.text?.toString().orEmpty().trim()
+        val paired = PairedDevice(
+            deviceId = device.deviceId,
+            deviceName = device.deviceName,
+            apiToken = token,
+            lastKnownIp = device.ip,
+            lastKnownPort = device.port,
+            lastSeenAt = System.currentTimeMillis()
+        )
+        settingsRepository.savePairedDevice(paired)
+        val current = settingsRepository.getSettings()
+        settingsRepository.saveSettings(
+            current.copy(
+                usePairedDevice = true,
+                pairedDevice = paired,
+                apiToken = token
+            )
+        )
+        binding.switchUsePairedDevice.isChecked = true
+        Toast.makeText(this, getString(R.string.toast_device_paired, device.deviceName), Toast.LENGTH_SHORT).show()
+        refreshDeviceStatus()
+        lifecycleScope.launch {
+            dispatchManager.retryPendingQueue()
+        }
+    }
+
+    private fun unpairDevice() {
+        settingsRepository.clearPairedDevice()
+        Toast.makeText(this, R.string.toast_device_unpaired, Toast.LENGTH_SHORT).show()
+        refreshDeviceStatus()
+    }
+
+    private fun retryPendingNow() {
+        ClipboardMonitorService.retryPending(this)
+        Toast.makeText(this, R.string.toast_retry_started, Toast.LENGTH_SHORT).show()
+    }
+
+    private fun refreshDeviceStatus() {
+        val settings = settingsRepository.getSettings()
+        val paired = settings.pairedDevice
+        val pendingCount = settingsRepository.pendingCount()
+
+        binding.btnUnpairDevice.isEnabled = paired != null
+        binding.layoutApiEndpoint.visibility = if (settings.usePairedDevice) View.GONE else View.VISIBLE
+        binding.pendingStatusText.visibility = if (pendingCount > 0) View.VISIBLE else View.GONE
+        binding.pendingStatusText.text = getString(R.string.pending_count, pendingCount)
+
+        if (paired == null) {
+            binding.deviceStatusText.text = getString(R.string.device_not_paired)
+            return
+        }
+
+        binding.deviceStatusText.text = getString(
+            R.string.device_paired_offline,
+            paired.deviceName,
+            paired.lastKnownIp.ifBlank { "?" }
+        )
+
+        lifecycleScope.launch {
+            val online = deviceResolver.isPairedDeviceOnline()
+            val resolved = if (online) deviceResolver.resolve() else null
+            if (online && resolved != null) {
+                binding.deviceStatusText.text = getString(
+                    R.string.device_paired_online,
+                    paired.deviceName,
+                    resolved.url
+                )
+            } else {
+                binding.deviceStatusText.text = getString(
+                    R.string.device_paired_offline,
+                    paired.deviceName,
+                    paired.lastKnownIp.ifBlank { "?" }
+                )
+            }
+        }
     }
 
     private fun requestNotificationAndStart() {
@@ -136,18 +278,27 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun hasValidTarget(settings: com.marksdispatcher.app.model.AppSettings): Boolean {
+        return if (settings.usePairedDevice) {
+            settings.pairedDevice != null
+        } else {
+            settings.apiEndpoint.isNotBlank()
+        }
+    }
+
     private fun toggleMonitor(enable: Boolean) {
         saveSettings()
         val settings = settingsRepository.getSettings().copy(monitorEnabled = enable)
         settingsRepository.saveSettings(settings)
 
         if (enable) {
-            if (settings.apiEndpoint.isBlank()) {
-                Toast.makeText(this, "请先配置 API 地址", Toast.LENGTH_LONG).show()
+            if (!hasValidTarget(settings)) {
+                Toast.makeText(this, R.string.toast_need_pair_or_endpoint, Toast.LENGTH_LONG).show()
                 binding.switchMonitor.isChecked = false
                 settingsRepository.setMonitorEnabled(false)
                 return
             }
+            DispatchRetryWorker.schedule(this)
             ClipboardMonitorService.start(this)
             Toast.makeText(this, "已开始监听剪贴板", Toast.LENGTH_SHORT).show()
         } else {
@@ -164,7 +315,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun dispatchClipboardManually() {
-        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        val clipboard = getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
         if (!clipboard.hasPrimaryClip()) {
             Toast.makeText(this, "剪贴板为空", Toast.LENGTH_SHORT).show()
             return
