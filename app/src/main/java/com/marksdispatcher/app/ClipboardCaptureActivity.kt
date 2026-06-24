@@ -5,12 +5,14 @@ import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
+import com.marksdispatcher.app.detector.LinkSourceDetector
+import com.marksdispatcher.app.overlay.FloatingBubbleManager
 import com.marksdispatcher.app.service.ClipboardMonitorService
 import com.marksdispatcher.app.util.ClipboardReader
+import com.marksdispatcher.app.util.DispatchDeduper
 
 /**
- * Android 10+ 仅允许「当前拥有焦点的 App」读取剪贴板。
- * 前台 Service 在其它 App 中复制时无法直接读剪贴板，需通过透明 Activity 短暂获取焦点后读取。
+ * 浮标点击后启动，短暂获取焦点以合法读取剪贴板（Android 10+）。
  */
 class ClipboardCaptureActivity : AppCompatActivity() {
 
@@ -39,10 +41,20 @@ class ClipboardCaptureActivity : AppCompatActivity() {
 
         val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
         val text = ClipboardReader.readText(this, clipboard)
-        if (!text.isNullOrBlank()) {
-            ClipboardMonitorService.dispatchNow(this, text)
+
+        val feedback = when (val decision = DispatchDeduper.evaluate(this, text.orEmpty())) {
+            DispatchDeduper.Decision.Empty -> FloatingBubbleManager.Feedback.Empty
+            DispatchDeduper.Decision.NotALink -> FloatingBubbleManager.Feedback.NotLink
+            DispatchDeduper.Decision.DuplicateSkipped -> FloatingBubbleManager.Feedback.Duplicate
+            DispatchDeduper.Decision.Proceed -> {
+                val url = LinkSourceDetector.analyzeClipboardText(text!!)!!.first
+                DispatchDeduper.markDispatched(this, url)
+                ClipboardMonitorService.dispatchNow(this, text)
+                FloatingBubbleManager.Feedback.Success
+            }
         }
 
+        FloatingBubbleManager.sendFeedback(this, feedback)
         finish()
         overridePendingTransition(0, 0)
     }

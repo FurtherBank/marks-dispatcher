@@ -131,6 +131,21 @@ class SettingsRepository(context: Context) {
 
     fun pendingCount(): Int = getPendingDispatches().size
 
+    fun getLastDispatchedUrl(): String? {
+        return prefs.getString(KEY_LAST_DISPATCHED_URL, null)
+    }
+
+    fun getLastDispatchedAt(): Long {
+        return prefs.getLong(KEY_LAST_DISPATCHED_AT, 0L)
+    }
+
+    fun setLastDispatchedUrl(url: String) {
+        prefs.edit()
+            .putString(KEY_LAST_DISPATCHED_URL, url)
+            .putLong(KEY_LAST_DISPATCHED_AT, System.currentTimeMillis())
+            .apply()
+    }
+
     private fun parseHistory(raw: String): List<DispatchRecord> {
         return try {
             val array = JSONArray(raw)
@@ -248,6 +263,8 @@ class SettingsRepository(context: Context) {
         private const val KEY_PAIRED_DEVICE_IP = "paired_device_ip"
         private const val KEY_PAIRED_DEVICE_PORT = "paired_device_port"
         private const val KEY_PAIRED_DEVICE_SEEN = "paired_device_seen"
+        private const val KEY_LAST_DISPATCHED_URL = "last_dispatched_url"
+        private const val KEY_LAST_DISPATCHED_AT = "last_dispatched_at"
         private const val MAX_HISTORY = 50
 
         /** 默认走 cpu-collector 标准端口，配对后自动解析 IP */

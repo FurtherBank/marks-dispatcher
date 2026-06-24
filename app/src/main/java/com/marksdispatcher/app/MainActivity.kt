@@ -30,6 +30,7 @@ import com.marksdispatcher.app.model.DispatchRecord
 import com.marksdispatcher.app.model.PairedDevice
 import com.marksdispatcher.app.service.ClipboardMonitorService
 import com.marksdispatcher.app.worker.DispatchRetryWorker
+import com.marksdispatcher.app.overlay.OverlayPermissionHelper
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -58,6 +59,17 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, "通知权限未授予，前台服务可能无法正常显示", Toast.LENGTH_LONG).show()
         }
         toggleMonitor(true)
+    }
+
+    private val overlayPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) {
+        if (OverlayPermissionHelper.canDrawOverlays(this)) {
+            requestNotificationAndStart(skipOverlayCheck = true)
+        } else {
+            binding.switchMonitor.isChecked = false
+            Toast.makeText(this, R.string.toast_need_overlay, Toast.LENGTH_LONG).show()
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -129,6 +141,7 @@ class MainActivity : AppCompatActivity() {
         binding.btnScanDevices.setOnClickListener { scanLanDevices() }
         binding.btnUnpairDevice.setOnClickListener { unpairDevice() }
         binding.btnRetryPending.setOnClickListener { retryPendingNow() }
+        binding.btnGrantOverlay.setOnClickListener { openOverlaySettings() }
 
         binding.btnDispatchClipboard.setOnClickListener { dispatchClipboardManually() }
         binding.btnClearHistory.setOnClickListener {
@@ -263,7 +276,12 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun requestNotificationAndStart() {
+    private fun requestNotificationAndStart(skipOverlayCheck: Boolean = false) {
+        if (!skipOverlayCheck && !OverlayPermissionHelper.canDrawOverlays(this)) {
+            binding.switchMonitor.isChecked = false
+            showOverlayRequiredDialog()
+            return
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             when {
                 ContextCompat.checkSelfPermission(
@@ -286,6 +304,21 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun openOverlaySettings() {
+        overlayPermissionLauncher.launch(OverlayPermissionHelper.createSettingsIntent(this))
+    }
+
+    private fun showOverlayRequiredDialog() {
+        AlertDialog.Builder(this)
+            .setTitle(R.string.dialog_overlay_title)
+            .setMessage(R.string.dialog_overlay_message)
+            .setPositiveButton(R.string.btn_grant_overlay) { _, _ ->
+                openOverlaySettings()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
     private fun toggleMonitor(enable: Boolean) {
         saveSettings()
         val settings = settingsRepository.getSettings().copy(monitorEnabled = enable)
@@ -300,7 +333,7 @@ class MainActivity : AppCompatActivity() {
             }
             DispatchRetryWorker.schedule(this)
             ClipboardMonitorService.start(this)
-            Toast.makeText(this, "已开始监听剪贴板", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, R.string.toast_monitor_started, Toast.LENGTH_SHORT).show()
         } else {
             stopMonitor()
         }
@@ -322,17 +355,23 @@ class MainActivity : AppCompatActivity() {
             return
         }
         saveSettings()
-        ClipboardMonitorService.dispatchNow(this, text)
+        ClipboardMonitorService.dispatchNow(this, text, force = true)
         Toast.makeText(this, "正在手动派发剪贴板内容…", Toast.LENGTH_SHORT).show()
     }
 
     private fun refreshMonitorUi() {
         val enabled = settingsRepository.getSettings().monitorEnabled
+        val overlayGranted = OverlayPermissionHelper.canDrawOverlays(this)
         binding.switchMonitor.isChecked = enabled
-        binding.statusText.text = if (enabled) {
-            getString(R.string.status_monitoring)
+        binding.overlayStatusText.text = if (overlayGranted) {
+            getString(R.string.overlay_status_enabled)
         } else {
-            getString(R.string.status_idle)
+            getString(R.string.overlay_status_disabled)
+        }
+        binding.statusText.text = when {
+            enabled && overlayGranted -> getString(R.string.status_monitoring)
+            enabled && !overlayGranted -> getString(R.string.overlay_status_disabled)
+            else -> getString(R.string.status_idle)
         }
     }
 
