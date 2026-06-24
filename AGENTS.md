@@ -183,4 +183,5 @@ Release 命名规则：
 
 - CI：`.github/workflows/android-ci.yml`
 - 版本：`app/build.gradle.kts`
+- Debug 签名：`app/ci-debug.keystore`（固定密钥，CI 与本地 debug 构建共用，支持覆盖安装）
 - 配对/派发：`app/src/main/java/com/marksdispatcher/app/api/CollectorDiscoveryClient.kt`

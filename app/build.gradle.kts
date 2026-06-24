@@ -11,13 +11,26 @@ android {
         applicationId = "com.marksdispatcher.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 4
-        versionName = "1.1.2"
+        versionCode = 5
+        versionName = "1.2.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        // CI runner 每次都会生成新的默认 debug 签名，导致无法覆盖安装；固定使用仓库内密钥。
+        create("ciDebug") {
+            storeFile = file("ci-debug.keystore")
+            storePassword = "marks-dispatcher-ci"
+            keyAlias = "marks-dispatcher-ci"
+            keyPassword = "marks-dispatcher-ci"
+        }
+    }
+
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("ciDebug")
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(

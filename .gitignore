@@ -13,9 +13,10 @@ captures/
 .externalNativeBuild/
 .cxx/
 
-# Keystore (do not commit signing keys)
+# Keystore (do not commit release signing keys)
 *.jks
 *.keystore
+!app/ci-debug.keystore
 keystore.properties
 
 # Logs
