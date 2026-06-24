@@ -55,6 +55,8 @@ export https_proxy=http://127.0.0.1:7993
 export http_proxy=http://127.0.0.1:7993
 ```
 
+（验收脚本 `scripts/wait-apk-release.sh` 默认使用端口 **7994**；若本地代理不同，可 `DISPATCHER_PROXY_PORT=7993 ./scripts/wait-apk-release.sh`。）
+
 - **禁止** force push `main`、跳过 hooks、提交密钥或 `.env`
 
 ### 4. 等待 CI 并完成构建验收
@@ -78,7 +80,33 @@ export http_proxy=http://127.0.0.1:7993
 
 环境变量 `DISPATCHER_DOWNLOAD_TOKEN` 已配置于用户 `~/.zshrc`（Fine-grained PAT，需 **Contents: Read**）。
 
-Agent 在新 shell 中应先加载：
+**推荐：一键轮询 + macOS 通知 + 剪贴板（Agent 在 push 后必须执行）**
+
+```bash
+cd /path/to/ai-workspace/marks-dispatcher
+chmod +x scripts/wait-apk-release.sh
+
+# 使用当前 HEAD commit（push 后在本仓库执行）
+./scripts/wait-apk-release.sh
+
+# 或指定完整 40 位 sha
+./scripts/wait-apk-release.sh <COMMIT_SHA>
+```
+
+脚本行为：
+
+1. 按 commit SHA 轮询 `debug-<sha>` Release（默认每 45s，最多 20 次）
+2. APK 就绪后 **将 `browser_download_url` 复制到 macOS 剪贴板**
+3. 发送 **macOS 系统通知**（标题「marks-dispatcher APK 就绪」）
+4. 在终端打印 `apk_url` / `size` / `tag`
+
+跳过通知与剪贴板（仅调试）：`SKIP_MAC_NOTIFY=1 ./scripts/wait-apk-release.sh`
+
+代理端口默认 `7994`（`DISPATCHER_PROXY_PORT` 可覆盖）；token 自动从 `~/.zshrc` 读取。
+
+**手动查询（不推荐 Agent 日常使用，无通知/剪贴板）**
+
+Agent 在新 shell 中应先加载 token：
 
 ```bash
 source ~/.zshrc
@@ -92,19 +120,22 @@ print(val)
 ")
 ```
 
-**按本次 commit 验收（推荐）：**
+按本次 commit 验收：
 
 ```bash
 COMMIT_SHA="<push 后的完整 40 位 sha>"
-export all_proxy=http://127.0.0.1:7993 https_proxy=http://127.0.0.1:7993 http_proxy=http://127.0.0.1:7993
+export all_proxy=http://127.0.0.1:7994 https_proxy=http://127.0.0.1:7994 http_proxy=http://127.0.0.1:7994
 
 curl -sS --max-time 30 \
   -H "Authorization: Bearer $DISPATCHER_DOWNLOAD_TOKEN" \
   -H "Accept: application/vnd.github+json" \
   "https://api.github.com/repos/FurtherBank/marks-dispatcher/releases/tags/debug-${COMMIT_SHA}" \
-  | python3 -c "
-import sys, json
-r = json.load(sys.stdin)
+  -o /tmp/marks-dispatcher-release.json
+
+python3 -c "
+import json
+with open('/tmp/marks-dispatcher-release.json') as f:
+    r = json.load(f)
 if r.get('message'):
     print('PENDING_OR_FAILED:', r['message']); raise SystemExit(1)
 apk = next(a for a in r.get('assets', []) if a['name'].endswith('.apk'))
@@ -114,11 +145,13 @@ print('apk_url:', apk['browser_download_url'])
 "
 ```
 
-**轮询（CI 通常 3–8 分钟）：** 若返回 `PENDING_OR_FAILED: Not Found`，每 30–60 秒重试，最多约 15 分钟；超时则查看 Actions 日志排障。
+**轮询（CI 通常 3–8 分钟）：** 若返回 `PENDING_OR_FAILED: Not Found`，每 30–60 秒重试，最多约 15 分钟；超时则查看 Actions 日志排障。上述步骤已由 `scripts/wait-apk-release.sh` 封装。
 
 **取当前最新构建（不绑定特定 commit 时）：**
 
 ```bash
+export all_proxy=http://127.0.0.1:7994 https_proxy=http://127.0.0.1:7994 http_proxy=http://127.0.0.1:7994
+
 curl -sS --max-time 30 \
   -H "Authorization: Bearer $DISPATCHER_DOWNLOAD_TOKEN" \
   -H "Accept: application/vnd.github+json" \
@@ -135,7 +168,7 @@ print('apk_url:', apk['browser_download_url'])
 
 ### 6. 向用户交付（回复模板）
 
-Agent 完成迭代后，回复中**必须包含**：
+Agent 完成迭代后，**必须先运行** `./scripts/wait-apk-release.sh`（或等价地拿到链接并完成 macOS 通知 + 剪贴板复制），回复中**必须包含**：
 
 1. **变更摘要**（做了什么、修了什么）
 2. **commit SHA** 与 **versionName**（若已 bump）
@@ -183,5 +216,6 @@ Release 命名规则：
 
 - CI：`.github/workflows/android-ci.yml`
 - 版本：`app/build.gradle.kts`
+- **APK 验收 + macOS 通知/剪贴板**：`scripts/wait-apk-release.sh`
 - Debug 签名：`app/ci-debug.keystore`（固定密钥，CI 与本地 debug 构建共用，支持覆盖安装）
 - 配对/派发：`app/src/main/java/com/marksdispatcher/app/api/CollectorDiscoveryClient.kt`
