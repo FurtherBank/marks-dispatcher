@@ -41,6 +41,25 @@
             android:taskAffinity=""
             android:theme="@style/Theme.BubbleDispatch" />
 
+        <!-- 分享 / 显式 Intent 接收文字并派发 -->
+        <activity
+            android:name=".TextDispatchActivity"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:noHistory="true"
+            android:theme="@style/Theme.BubbleDispatch">
+            <intent-filter android:label="@string/share_dispatch_label">
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="com.marksdispatcher.app.action.DISPATCH_TEXT" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
         <service
             android:name=".service.ClipboardMonitorService"
             android:exported="false"

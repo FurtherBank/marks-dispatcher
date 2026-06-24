@@ -54,4 +54,6 @@
     <string name="toast_dispatch_duplicate">该链接 10 分钟内已派发过</string>
     <string name="toast_dispatch_success">已派发到电脑 · %1$s</string>
     <string name="toast_dispatch_failed">派发失败：%1$s</string>
+    <string name="toast_intent_text_empty">未收到可派发的文字内容</string>
+    <string name="share_dispatch_label">派发到电脑</string>
 </resources>
