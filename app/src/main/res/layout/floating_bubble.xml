@@ -1,19 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/bubbleCard"
-    android:layout_width="52dp"
-    android:layout_height="52dp"
-    android:background="@drawable/bubble_circle"
-    android:elevation="6dp">
-
-    <TextView
-        android:id="@+id/bubbleLabel"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:gravity="center"
-        android:text="@string/bubble_label_idle"
-        android:textColor="@android:color/white"
-        android:textSize="16sp"
-        android:textStyle="bold" />
-
-</FrameLayout>
+    android:layout_width="16dp"
+    android:layout_height="56dp"
+    android:background="@drawable/bubble_pill"
+    android:contentDescription="@string/bubble_content_desc"
+    android:elevation="4dp" />

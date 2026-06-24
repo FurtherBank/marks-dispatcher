@@ -2,7 +2,7 @@
     <string name="app_name">收藏派发器</string>
     <string name="app_title">收藏链接自动派发</string>
     <string name="status_idle">状态：未开启</string>
-    <string name="status_monitoring">状态：浮标就绪，复制后点「发」同步</string>
+    <string name="status_monitoring">状态：浮标就绪，复制后点侧边浮标同步</string>
     <string name="label_monitor">开启浮标同步</string>
     <string name="label_auto_start">开机自动恢复浮标</string>
     <string name="label_paired_device">配对电脑（cpu-collector）</string>
@@ -17,7 +17,7 @@
     <string name="btn_retry_pending">立即重试待发送</string>
     <string name="label_history">派发记录</string>
     <string name="btn_clear_history">清空</string>
-    <string name="empty_history">暂无派发记录。复制链接后点击屏幕边缘浮标「发」即可同步。</string>
+    <string name="empty_history">暂无派发记录。复制链接后点击屏幕边缘浮标即可同步。</string>
     <string name="device_not_paired">尚未配对电脑。请先在同一 Wi‑Fi 下扫描并选择 cpu-collector 设备。</string>
     <string name="device_paired_online">已配对：%1$s\n在线 → %2$s</string>
     <string name="device_paired_offline">已配对：%1$s\n离线（上次 IP：%2$s），待发送会在设备上线后自动重试</string>
@@ -30,12 +30,12 @@
     <string name="toast_device_unpaired">已取消配对</string>
     <string name="toast_retry_started">正在重试待发送队列…</string>
     <string name="toast_need_pair_or_endpoint">请先扫描配对电脑，或关闭「使用配对设备」并填写 API 地址</string>
-    <string name="toast_monitor_started">浮标已显示，复制链接后点「发」同步</string>
+    <string name="toast_monitor_started">浮标已显示，复制链接后点侧边浮标同步</string>
     <string name="toast_need_overlay">请授予「显示在其他应用上层」权限以显示浮标</string>
     <string name="notification_channel_name">浮标同步</string>
     <string name="notification_channel_desc">保持前台服务与浮标可用</string>
     <string name="notification_title">收藏派发器</string>
-    <string name="notification_monitoring">复制链接后，点浮标「发」同步</string>
+    <string name="notification_monitoring">复制链接后，点侧边浮标同步</string>
     <string name="notification_dispatching">正在派发：%1$s</string>
     <string name="notification_dispatched">已派发：%1$s</string>
     <string name="notification_not_link">剪贴板内容不是链接</string>
@@ -45,10 +45,6 @@
     <string name="overlay_status_disabled">悬浮窗权限：未授予（浮标必需）</string>
     <string name="btn_grant_overlay">去授予悬浮窗权限</string>
     <string name="dialog_overlay_title">需要悬浮窗权限</string>
-    <string name="dialog_overlay_message">开启后会在屏幕边缘显示「发」浮标。\n\n复制链接后点一下浮标即可同步到电脑；同一链接 10 分钟内不会重复派发。</string>
-    <string name="bubble_label_idle">发</string>
-    <string name="bubble_label_syncing">…</string>
-    <string name="bubble_label_success">✓</string>
-    <string name="bubble_label_duplicate">已发</string>
-    <string name="bubble_label_invalid">×</string>
+    <string name="dialog_overlay_message">开启后会在屏幕边缘显示一条柔和浮标。\n\n复制链接后点一下即可同步到电脑；同一链接 10 分钟内不会重复派发。</string>
+    <string name="bubble_content_desc">同步剪贴板链接</string>
 </resources>

@@ -17,7 +17,6 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 import android.widget.FrameLayout
-import android.widget.TextView
 import androidx.core.content.ContextCompat
 import com.marksdispatcher.app.ClipboardCaptureActivity
 import com.marksdispatcher.app.R
@@ -42,7 +41,6 @@ object FloatingBubbleManager {
     private var windowManager: WindowManager? = null
     private var bubbleView: View? = null
     private var layoutParams: WindowManager.LayoutParams? = null
-    private var labelView: TextView? = null
     private var cardView: FrameLayout? = null
     private var attachedContext: Context? = null
     private var feedbackReceiver: BroadcastReceiver? = null
@@ -92,13 +90,11 @@ object FloatingBubbleManager {
             layoutParams = params
 
             val view = LayoutInflater.from(appContext).inflate(R.layout.floating_bubble, null)
-            labelView = view.findViewById(R.id.bubbleLabel)
             cardView = view.findViewById(R.id.bubbleCard)
             setupTouch(view)
             windowManager?.addView(view, params)
             bubbleView = view
             setBubbleColor(R.color.bubble_background)
-            labelView?.text = appContext.getString(R.string.bubble_label_idle)
             registerFeedbackReceiver(appContext)
             true
         } catch (e: Exception) {
@@ -116,7 +112,6 @@ object FloatingBubbleManager {
                 runCatching { windowManager?.removeView(view) }
             }
             bubbleView = null
-            labelView = null
             cardView = null
             layoutParams = null
             windowManager = null
@@ -166,28 +161,15 @@ object FloatingBubbleManager {
     }
 
     private fun showFeedback(feedback: Feedback, resetToIdle: Boolean = true) {
-        val label = labelView ?: return
-        val context = attachedContext ?: return
+        if (cardView == null) return
 
         resetRunnable?.let { handler.removeCallbacks(it) }
 
         when (feedback) {
-            Feedback.Syncing -> {
-                label.text = context.getString(R.string.bubble_label_syncing)
-                setBubbleColor(R.color.bubble_syncing)
-            }
-            Feedback.Success -> {
-                label.text = context.getString(R.string.bubble_label_success)
-                setBubbleColor(R.color.bubble_success)
-            }
-            Feedback.Duplicate -> {
-                label.text = context.getString(R.string.bubble_label_duplicate)
-                setBubbleColor(R.color.bubble_duplicate)
-            }
-            Feedback.NotLink, Feedback.Empty -> {
-                label.text = context.getString(R.string.bubble_label_invalid)
-                setBubbleColor(R.color.bubble_invalid)
-            }
+            Feedback.Syncing -> setBubbleColor(R.color.bubble_syncing)
+            Feedback.Success -> setBubbleColor(R.color.bubble_success)
+            Feedback.Duplicate -> setBubbleColor(R.color.bubble_duplicate)
+            Feedback.NotLink, Feedback.Empty -> setBubbleColor(R.color.bubble_invalid)
         }
 
         if (resetToIdle && feedback != Feedback.Syncing) {
@@ -199,11 +181,11 @@ object FloatingBubbleManager {
         val context = attachedContext ?: return
         val card = cardView ?: return
         val color = ContextCompat.getColor(context, colorRes)
-        val stroke = ContextCompat.getColor(context, R.color.bubble_stroke)
+        val radius = 10f * context.resources.displayMetrics.density
         val drawable = GradientDrawable().apply {
-            shape = GradientDrawable.OVAL
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = radius
             setColor(color)
-            setStroke((1 * context.resources.displayMetrics.density).toInt().coerceAtLeast(1), stroke)
         }
         card.background = drawable
     }
@@ -211,8 +193,6 @@ object FloatingBubbleManager {
     private fun resetToIdleDelayed() {
         resetRunnable?.let { handler.removeCallbacks(it) }
         val runnable = Runnable {
-            val context = attachedContext ?: return@Runnable
-            labelView?.text = context.getString(R.string.bubble_label_idle)
             setBubbleColor(R.color.bubble_background)
         }
         resetRunnable = runnable

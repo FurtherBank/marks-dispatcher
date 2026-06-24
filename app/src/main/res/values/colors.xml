@@ -4,10 +4,10 @@
     <color name="md_theme_on_primary">#FFFFFF</color>
     <color name="status_success">#2E7D32</color>
     <color name="status_error">#C62828</color>
-    <color name="bubble_background">#1565C0</color>
-    <color name="bubble_stroke">#0D47A1</color>
-    <color name="bubble_syncing">#455A64</color>
-    <color name="bubble_success">#2E7D32</color>
-    <color name="bubble_duplicate">#757575</color>
-    <color name="bubble_invalid">#C62828</color>
+    <color name="bubble_background">#6B9AE8</color>
+    <color name="bubble_stroke">#5A87D6</color>
+    <color name="bubble_syncing">#90A4AE</color>
+    <color name="bubble_success">#66BB6A</color>
+    <color name="bubble_duplicate">#B0BEC5</color>
+    <color name="bubble_invalid">#E57373</color>
 </resources>
