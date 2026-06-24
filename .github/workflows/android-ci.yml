@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -35,7 +38,8 @@ jobs:
       - name: Rename APK with commit hash
         run: cp app/build/outputs/apk/debug/app-debug.apk app-debug-${{ github.sha }}.apk
 
-      - name: Upload debug APK
+      # Artifact 下载时 GitHub 仍会打包成 .zip，仅适合 CI 留存/调试。
+      - name: Upload debug APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: app-debug-${{ github.sha }}
@@ -49,3 +53,33 @@ jobs:
           name: unit-test-reports
           path: app/build/reports/tests/
           if-no-files-found: ignore
+
+  publish-apk:
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download APK artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: app-debug-${{ github.sha }}
+
+      # Release asset 才是可直接下载的 .apk 文件（不经 zip 包裹）。
+      - name: Publish standalone APK release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: debug-${{ github.sha }}
+          name: Debug APK ${{ github.sha }}
+          prerelease: true
+          make_latest: true
+          files: app-debug-*.apk
+          body: |
+            Standalone debug APK for commit `${{ github.sha }}`.
+            Download the `.apk` file below directly — no zip extraction needed.
+
+            ```bash
+            gh release download --repo ${{ github.repository }} --pattern "*.apk" --dir ./apk-out
+            ```
