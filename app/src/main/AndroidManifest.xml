@@ -31,6 +31,16 @@
             </intent-filter>
         </activity>
 
+        <!-- Android 10+ 后台无法读剪贴板，需透明 Activity 短暂获取焦点 -->
+        <activity
+            android:name=".ClipboardCaptureActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@style/Theme.TransparentCapture" />
+
         <service
             android:name=".service.ClipboardMonitorService"
             android:exported="false"

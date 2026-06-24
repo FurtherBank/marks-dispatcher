@@ -5,13 +5,14 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
-import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
+import android.util.Log
 import androidx.core.app.NotificationCompat
+import com.marksdispatcher.app.ClipboardCaptureActivity
 import com.marksdispatcher.app.MainActivity
 import com.marksdispatcher.app.R
 import com.marksdispatcher.app.data.SettingsRepository
@@ -19,6 +20,7 @@ import com.marksdispatcher.app.detector.LinkSourceDetector
 import com.marksdispatcher.app.dispatch.DispatchManager
 import com.marksdispatcher.app.model.DispatchPayload
 import com.marksdispatcher.app.model.DispatchRecord
+import com.marksdispatcher.app.util.ClipboardReader
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -34,6 +36,8 @@ class ClipboardMonitorService : Service(), ClipboardManager.OnPrimaryClipChanged
     private lateinit var dispatchManager: DispatchManager
 
     private var lastProcessedText: String? = null
+    private var listenerRegistered = false
+    private var lastCaptureLaunchAt = 0L
 
     override fun onCreate() {
         super.onCreate()
@@ -67,7 +71,7 @@ class ClipboardMonitorService : Service(), ClipboardManager.OnPrimaryClipChanged
         }
 
         startForeground(NOTIFICATION_ID, buildNotification("监听中，复制链接后将自动派发"))
-        clipboardManager.addPrimaryClipChangedListener(this)
+        registerListenerIfNeeded()
         serviceScope.launch {
             dispatchManager.retryPendingQueue()
         }
@@ -75,22 +79,45 @@ class ClipboardMonitorService : Service(), ClipboardManager.OnPrimaryClipChanged
     }
 
     override fun onPrimaryClipChanged() {
-        val text = readClipboardText() ?: return
-        processClipboardText(text, force = false)
+        val text = readClipboardText()
+        if (text != null) {
+            processClipboardText(text, force = false)
+            return
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            Log.d(TAG, "剪贴板变化但后台无法读取，启动透明捕获 Activity")
+            requestClipboardCapture()
+        }
     }
 
     private fun readClipboardText(): String? {
-        if (!clipboardManager.hasPrimaryClip()) return null
-        val clip = clipboardManager.primaryClip ?: return null
-        if (clip.itemCount == 0) return null
-        val item: ClipData.Item = clip.getItemAt(0)
-        return item.coerceToText(this)?.toString()?.trim()?.takeIf { it.isNotEmpty() }
+        return ClipboardReader.readText(this, clipboardManager)
+    }
+
+    private fun requestClipboardCapture() {
+        val now = System.currentTimeMillis()
+        if (now - lastCaptureLaunchAt < CAPTURE_DEBOUNCE_MS) return
+        lastCaptureLaunchAt = now
+
+        try {
+            ClipboardCaptureActivity.launch(this)
+        } catch (e: Exception) {
+            Log.e(TAG, "无法启动剪贴板捕获 Activity", e)
+            updateNotification("检测到复制，但无法读取剪贴板（请尝试手动派发）")
+        }
     }
 
     private fun processClipboardText(text: String, force: Boolean) {
         if (!force && text == lastProcessedText) return
 
-        val analysis = LinkSourceDetector.analyzeClipboardText(text) ?: return
+        val analysis = LinkSourceDetector.analyzeClipboardText(text)
+        if (analysis == null) {
+            if (force) {
+                updateNotification("剪贴板内容未识别为链接")
+            }
+            return
+        }
         val (url, source) = analysis
 
         lastProcessedText = text
@@ -112,13 +139,7 @@ class ClipboardMonitorService : Service(), ClipboardManager.OnPrimaryClipChanged
                 success = outcome.success,
                 message = outcome.message
             )
-            if (outcome.success) {
-                settingsRepository.appendHistory(record)
-            } else if (!outcome.queuedForRetry) {
-                settingsRepository.appendHistory(record)
-            } else {
-                settingsRepository.appendHistory(record)
-            }
+            settingsRepository.appendHistory(record)
 
             val statusText = if (outcome.success) {
                 "已派发 ${source.label}"
@@ -130,8 +151,17 @@ class ClipboardMonitorService : Service(), ClipboardManager.OnPrimaryClipChanged
         }
     }
 
+    private fun registerListenerIfNeeded() {
+        if (listenerRegistered) return
+        clipboardManager.addPrimaryClipChangedListener(this)
+        listenerRegistered = true
+    }
+
     private fun stopMonitoring() {
-        clipboardManager.removePrimaryClipChangedListener(this)
+        if (listenerRegistered) {
+            clipboardManager.removePrimaryClipChangedListener(this)
+            listenerRegistered = false
+        }
         settingsRepository.setMonitorEnabled(false)
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
@@ -182,7 +212,10 @@ class ClipboardMonitorService : Service(), ClipboardManager.OnPrimaryClipChanged
     }
 
     override fun onDestroy() {
-        clipboardManager.removePrimaryClipChangedListener(this)
+        if (listenerRegistered) {
+            clipboardManager.removePrimaryClipChangedListener(this)
+            listenerRegistered = false
+        }
         serviceScope.cancel()
         super.onDestroy()
     }
@@ -190,6 +223,9 @@ class ClipboardMonitorService : Service(), ClipboardManager.OnPrimaryClipChanged
     override fun onBind(intent: Intent?): IBinder? = null
 
     companion object {
+        private const val TAG = "ClipboardMonitor"
+        private const val CAPTURE_DEBOUNCE_MS = 400L
+
         const val ACTION_STOP = "com.marksdispatcher.app.action.STOP_MONITOR"
         const val ACTION_DISPATCH_NOW = "com.marksdispatcher.app.action.DISPATCH_NOW"
         const val ACTION_RETRY_PENDING = "com.marksdispatcher.app.action.RETRY_PENDING"

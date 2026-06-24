@@ -316,13 +316,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun dispatchClipboardManually() {
         val clipboard = getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
-        if (!clipboard.hasPrimaryClip()) {
-            Toast.makeText(this, "剪贴板为空", Toast.LENGTH_SHORT).show()
-            return
-        }
-        val text = clipboard.primaryClip?.getItemAt(0)?.coerceToText(this)?.toString().orEmpty()
+        val text = com.marksdispatcher.app.util.ClipboardReader.readText(this, clipboard).orEmpty()
         if (text.isBlank()) {
-            Toast.makeText(this, "剪贴板无文本内容", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "剪贴板为空或无可用链接", Toast.LENGTH_SHORT).show()
             return
         }
         saveSettings()
