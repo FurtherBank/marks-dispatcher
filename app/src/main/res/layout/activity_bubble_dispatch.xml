@@ -1,25 +1,27 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- 派发页：仅居中卡片，不用全屏遮罩，避免「整屏透明/发灰」 -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#66000000">
+    android:background="@android:color/transparent"
+    android:gravity="center">
 
-    <com.google.android.material.card.MaterialCardView xmlns:app="http://schemas.android.com/apk/res-auto"
+    <FrameLayout
         android:layout_width="280dp"
         android:layout_height="wrap_content"
-        android:layout_gravity="center"
-        app:cardCornerRadius="16dp"
-        app:cardElevation="8dp">
+        android:background="@drawable/dispatch_card_bg"
+        android:elevation="8dp"
+        android:padding="24dp">
 
         <TextView
             android:id="@+id/dispatchStatusText"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:gravity="center"
-            android:padding="24dp"
             android:text="@string/dispatch_gate_processing"
-            android:textAppearance="?attr/textAppearanceBodyLarge" />
+            android:textColor="@color/md_theme_on_surface"
+            android:textSize="16sp" />
 
-    </com.google.android.material.card.MaterialCardView>
+    </FrameLayout>
 
 </FrameLayout>

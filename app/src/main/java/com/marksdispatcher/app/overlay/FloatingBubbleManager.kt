@@ -11,12 +11,13 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import android.util.TypedValue
+import android.view.ContextThemeWrapper
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
-import android.widget.FrameLayout
 import androidx.core.content.ContextCompat
 import com.marksdispatcher.app.ClipboardCaptureActivity
 import com.marksdispatcher.app.R
@@ -41,7 +42,7 @@ object FloatingBubbleManager {
     private var windowManager: WindowManager? = null
     private var bubbleView: View? = null
     private var layoutParams: WindowManager.LayoutParams? = null
-    private var cardView: FrameLayout? = null
+    private var cardView: View? = null
     private var attachedContext: Context? = null
     private var feedbackReceiver: BroadcastReceiver? = null
     private var resetRunnable: Runnable? = null
@@ -64,8 +65,14 @@ object FloatingBubbleManager {
         return if (Looper.myLooper() == Looper.getMainLooper()) {
             showOnMainThread(appContext)
         } else {
-            handler.post { showOnMainThread(appContext) }
-            bubbleView != null
+            var success = false
+            val latch = java.util.concurrent.CountDownLatch(1)
+            handler.post {
+                success = showOnMainThread(appContext)
+                latch.countDown()
+            }
+            latch.await()
+            success
         }
     }
 
@@ -75,27 +82,33 @@ object FloatingBubbleManager {
             attachedContext = appContext
             windowManager = appContext.getSystemService(Context.WINDOW_SERVICE) as WindowManager
 
+            val touchWidth = dpToPx(appContext, BUBBLE_TOUCH_WIDTH_DP)
+            val touchHeight = dpToPx(appContext, BUBBLE_TOUCH_HEIGHT_DP)
+
             val params = WindowManager.LayoutParams(
-                WindowManager.LayoutParams.WRAP_CONTENT,
-                WindowManager.LayoutParams.WRAP_CONTENT,
+                touchWidth,
+                touchHeight,
                 windowType(),
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                    WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                    WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+                    WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
                 PixelFormat.TRANSLUCENT
             ).apply {
                 gravity = Gravity.END or Gravity.CENTER_VERTICAL
-                x = 24
+                x = dpToPx(appContext, 8)
                 y = 0
             }
             layoutParams = params
 
-            val view = LayoutInflater.from(appContext).inflate(R.layout.floating_bubble, null)
+            val themedContext = ContextThemeWrapper(appContext, R.style.Theme_MarksDispatcher)
+            val view = LayoutInflater.from(themedContext).inflate(R.layout.floating_bubble, null)
             cardView = view.findViewById(R.id.bubbleCard)
             setupTouch(view)
+            setBubbleColor(R.color.bubble_background)
             windowManager?.addView(view, params)
             bubbleView = view
-            setBubbleColor(R.color.bubble_background)
             registerFeedbackReceiver(appContext)
+            Log.i(TAG, "bubble shown ${touchWidth}x${touchHeight}px at x=${params.x}")
             true
         } catch (e: Exception) {
             Log.e(TAG, "failed to show bubble", e)
@@ -181,11 +194,14 @@ object FloatingBubbleManager {
         val context = attachedContext ?: return
         val card = cardView ?: return
         val color = ContextCompat.getColor(context, colorRes)
+        val stroke = ContextCompat.getColor(context, R.color.bubble_stroke)
         val radius = 10f * context.resources.displayMetrics.density
+        val strokeWidth = (1f * context.resources.displayMetrics.density).toInt().coerceAtLeast(1)
         val drawable = GradientDrawable().apply {
             shape = GradientDrawable.RECTANGLE
             cornerRadius = radius
             setColor(color)
+            setStroke(strokeWidth, stroke)
         }
         card.background = drawable
     }
@@ -235,6 +251,14 @@ object FloatingBubbleManager {
         }
     }
 
+    private fun dpToPx(context: Context, dp: Int): Int {
+        return TypedValue.applyDimension(
+            TypedValue.COMPLEX_UNIT_DIP,
+            dp.toFloat(),
+            context.resources.displayMetrics
+        ).toInt()
+    }
+
     private fun windowType(): Int {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
@@ -244,6 +268,8 @@ object FloatingBubbleManager {
         }
     }
 
+    private const val BUBBLE_TOUCH_WIDTH_DP = 48
+    private const val BUBBLE_TOUCH_HEIGHT_DP = 80
     private const val RESET_IDLE_MS = 1_200L
     private const val TAP_DEBOUNCE_MS = 800L
 }

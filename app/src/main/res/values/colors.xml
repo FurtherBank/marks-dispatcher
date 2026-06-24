@@ -2,10 +2,11 @@
 <resources>
     <color name="md_theme_primary">#1565C0</color>
     <color name="md_theme_on_primary">#FFFFFF</color>
+    <color name="md_theme_on_surface">#1C1B1F</color>
     <color name="status_success">#2E7D32</color>
     <color name="status_error">#C62828</color>
     <color name="bubble_background">#6B9AE8</color>
-    <color name="bubble_stroke">#5A87D6</color>
+    <color name="bubble_stroke">#3D5A8C</color>
     <color name="bubble_syncing">#90A4AE</color>
     <color name="bubble_success">#66BB6A</color>
     <color name="bubble_duplicate">#B0BEC5</color>
