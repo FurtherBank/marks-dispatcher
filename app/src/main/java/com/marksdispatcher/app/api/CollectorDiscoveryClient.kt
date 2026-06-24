@@ -65,11 +65,8 @@ class CollectorDiscoveryClient {
             val deviceName = json.optString("device_name", ip)
             val resolvedPort = json.optInt("port", port)
             val dispatchPath = json.optString("dispatch_path", CollectorDefaults.DISPATCH_PATH)
-            val dispatchUrls = json.optJSONArray("dispatch_urls")
-            val dispatchUrl = when {
-                dispatchUrls != null && dispatchUrls.length() > 0 -> dispatchUrls.getString(0)
-                else -> "http://$ip:$resolvedPort$dispatchPath"
-            }
+            // 始终使用本次探测到的 IP，避免 ping 返回的 dispatch_urls[0] 是 Tailscale 而手机走局域网
+            val dispatchUrl = "http://$ip:$resolvedPort$dispatchPath"
 
             DiscoveredDevice(
                 deviceId = deviceId,
