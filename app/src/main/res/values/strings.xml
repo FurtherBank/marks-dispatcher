@@ -47,4 +47,11 @@
     <string name="dialog_overlay_title">需要悬浮窗权限</string>
     <string name="dialog_overlay_message">开启后会在屏幕边缘显示一条柔和浮标。\n\n复制链接后点一下即可同步到电脑；同一链接 10 分钟内不会重复派发。</string>
     <string name="bubble_content_desc">同步剪贴板链接</string>
+    <string name="dispatch_gate_processing">正在读取剪贴板…</string>
+    <string name="dispatch_gate_dispatching">正在派发到 %1$s…</string>
+    <string name="toast_clipboard_empty">剪贴板为空</string>
+    <string name="toast_clipboard_not_link">剪贴板内容不是链接</string>
+    <string name="toast_dispatch_duplicate">该链接 10 分钟内已派发过</string>
+    <string name="toast_dispatch_success">已派发到电脑 · %1$s</string>
+    <string name="toast_dispatch_failed">派发失败：%1$s</string>
 </resources>
