@@ -39,6 +39,7 @@
     <string name="notification_dispatching">正在派发：%1$s</string>
     <string name="notification_dispatched">已派发：%1$s</string>
     <string name="notification_not_link">剪贴板内容不是链接</string>
+    <string name="notification_bubble_failed">浮标显示失败，请确认已授予悬浮窗权限</string>
     <string name="notification_action_stop">停止</string>
     <string name="overlay_status_enabled">悬浮窗权限：已授予 ✓</string>
     <string name="overlay_status_disabled">悬浮窗权限：未授予（浮标必需）</string>

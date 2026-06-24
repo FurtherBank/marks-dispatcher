@@ -44,6 +44,7 @@ class MainActivity : AppCompatActivity() {
     private val lanScanner = LanDeviceScanner()
     private lateinit var deviceResolver: DeviceResolver
     private lateinit var dispatchManager: DispatchManager
+    private var suppressMonitorListener = false
 
     private val dispatchUpdateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -67,7 +68,9 @@ class MainActivity : AppCompatActivity() {
         if (OverlayPermissionHelper.canDrawOverlays(this)) {
             requestNotificationAndStart(skipOverlayCheck = true)
         } else {
+            suppressMonitorListener = true
             binding.switchMonitor.isChecked = false
+            suppressMonitorListener = false
             Toast.makeText(this, R.string.toast_need_overlay, Toast.LENGTH_LONG).show()
         }
     }
@@ -117,7 +120,9 @@ class MainActivity : AppCompatActivity() {
         binding.inputApiEndpoint.setText(settings.apiEndpoint)
         binding.inputApiToken.setText(settings.apiToken)
         binding.switchAutoStart.isChecked = settings.autoStartOnBoot
+        suppressMonitorListener = true
         binding.switchMonitor.isChecked = settings.monitorEnabled
+        suppressMonitorListener = false
         binding.switchUsePairedDevice.isChecked = settings.usePairedDevice
     }
 
@@ -125,6 +130,7 @@ class MainActivity : AppCompatActivity() {
         binding.btnSave.setOnClickListener { saveSettings() }
 
         binding.switchMonitor.setOnCheckedChangeListener { _, isChecked ->
+            if (suppressMonitorListener) return@setOnCheckedChangeListener
             if (isChecked) {
                 requestNotificationAndStart()
             } else {
@@ -278,7 +284,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun requestNotificationAndStart(skipOverlayCheck: Boolean = false) {
         if (!skipOverlayCheck && !OverlayPermissionHelper.canDrawOverlays(this)) {
+            suppressMonitorListener = true
             binding.switchMonitor.isChecked = false
+            suppressMonitorListener = false
             showOverlayRequiredDialog()
             return
         }
@@ -327,7 +335,9 @@ class MainActivity : AppCompatActivity() {
         if (enable) {
             if (!hasValidTarget(settings)) {
                 Toast.makeText(this, R.string.toast_need_pair_or_endpoint, Toast.LENGTH_LONG).show()
+                suppressMonitorListener = true
                 binding.switchMonitor.isChecked = false
+                suppressMonitorListener = false
                 settingsRepository.setMonitorEnabled(false)
                 return
             }
@@ -343,7 +353,9 @@ class MainActivity : AppCompatActivity() {
     private fun stopMonitor() {
         ClipboardMonitorService.stop(this)
         settingsRepository.setMonitorEnabled(false)
+        suppressMonitorListener = true
         binding.switchMonitor.isChecked = false
+        suppressMonitorListener = false
         refreshMonitorUi()
     }
 
@@ -362,7 +374,9 @@ class MainActivity : AppCompatActivity() {
     private fun refreshMonitorUi() {
         val enabled = settingsRepository.getSettings().monitorEnabled
         val overlayGranted = OverlayPermissionHelper.canDrawOverlays(this)
+        suppressMonitorListener = true
         binding.switchMonitor.isChecked = enabled
+        suppressMonitorListener = false
         binding.overlayStatusText.text = if (overlayGranted) {
             getString(R.string.overlay_status_enabled)
         } else {

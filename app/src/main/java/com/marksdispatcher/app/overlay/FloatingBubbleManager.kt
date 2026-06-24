@@ -6,22 +6,26 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.graphics.PixelFormat
+import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
+import android.widget.FrameLayout
 import android.widget.TextView
 import androidx.core.content.ContextCompat
-import com.google.android.material.card.MaterialCardView
 import com.marksdispatcher.app.ClipboardCaptureActivity
 import com.marksdispatcher.app.R
 
 @SuppressLint("ClickableViewAccessibility")
 object FloatingBubbleManager {
+
+    private const val TAG = "FloatingBubble"
 
     const val ACTION_BUBBLE_FEEDBACK = "com.marksdispatcher.app.action.BUBBLE_FEEDBACK"
     const val EXTRA_FEEDBACK = "extra_feedback"
@@ -39,7 +43,7 @@ object FloatingBubbleManager {
     private var bubbleView: View? = null
     private var layoutParams: WindowManager.LayoutParams? = null
     private var labelView: TextView? = null
-    private var cardView: MaterialCardView? = null
+    private var cardView: FrameLayout? = null
     private var attachedContext: Context? = null
     private var feedbackReceiver: BroadcastReceiver? = null
     private var resetRunnable: Runnable? = null
@@ -51,50 +55,73 @@ object FloatingBubbleManager {
     private var isDragging = false
     private var lastBubbleClickAt = 0L
 
-    fun show(context: Context) {
-        if (!OverlayPermissionHelper.canDrawOverlays(context)) return
-        if (bubbleView != null) return
+    fun show(context: Context): Boolean {
+        if (!OverlayPermissionHelper.canDrawOverlays(context)) {
+            Log.w(TAG, "overlay permission missing")
+            return false
+        }
+        if (bubbleView != null) return true
 
         val appContext = context.applicationContext
-        attachedContext = appContext
-        windowManager = appContext.getSystemService(Context.WINDOW_SERVICE) as WindowManager
-
-        val params = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            windowType(),
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
-            PixelFormat.TRANSLUCENT
-        ).apply {
-            gravity = Gravity.END or Gravity.CENTER_VERTICAL
-            x = 24
-            y = 0
+        return if (Looper.myLooper() == Looper.getMainLooper()) {
+            showOnMainThread(appContext)
+        } else {
+            handler.post { showOnMainThread(appContext) }
+            bubbleView != null
         }
-        layoutParams = params
+    }
 
-        val view = LayoutInflater.from(appContext).inflate(R.layout.floating_bubble, null)
-        labelView = view.findViewById(R.id.bubbleLabel)
-        cardView = view.findViewById(R.id.bubbleCard)
-        setupTouch(view)
-        windowManager?.addView(view, params)
-        bubbleView = view
-        labelView?.text = appContext.getString(R.string.bubble_label_idle)
-        cardView?.setCardBackgroundColor(ContextCompat.getColor(appContext, R.color.bubble_background))
+    private fun showOnMainThread(appContext: Context): Boolean {
+        if (bubbleView != null) return true
+        return try {
+            attachedContext = appContext
+            windowManager = appContext.getSystemService(Context.WINDOW_SERVICE) as WindowManager
 
-        registerFeedbackReceiver(appContext)
+            val params = WindowManager.LayoutParams(
+                WindowManager.LayoutParams.WRAP_CONTENT,
+                WindowManager.LayoutParams.WRAP_CONTENT,
+                windowType(),
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                    WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                PixelFormat.TRANSLUCENT
+            ).apply {
+                gravity = Gravity.END or Gravity.CENTER_VERTICAL
+                x = 24
+                y = 0
+            }
+            layoutParams = params
+
+            val view = LayoutInflater.from(appContext).inflate(R.layout.floating_bubble, null)
+            labelView = view.findViewById(R.id.bubbleLabel)
+            cardView = view.findViewById(R.id.bubbleCard)
+            setupTouch(view)
+            windowManager?.addView(view, params)
+            bubbleView = view
+            setBubbleColor(R.color.bubble_background)
+            labelView?.text = appContext.getString(R.string.bubble_label_idle)
+            registerFeedbackReceiver(appContext)
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "failed to show bubble", e)
+            hide()
+            false
+        }
     }
 
     fun hide() {
-        unregisterFeedbackReceiver()
-        resetRunnable?.let { handler.removeCallbacks(it) }
-        bubbleView?.let { windowManager?.removeView(it) }
-        bubbleView = null
-        labelView = null
-        cardView = null
-        layoutParams = null
-        windowManager = null
-        attachedContext = null
+        handler.post {
+            unregisterFeedbackReceiver()
+            resetRunnable?.let { handler.removeCallbacks(it) }
+            bubbleView?.let { view ->
+                runCatching { windowManager?.removeView(view) }
+            }
+            bubbleView = null
+            labelView = null
+            cardView = null
+            layoutParams = null
+            windowManager = null
+            attachedContext = null
+        }
     }
 
     fun onBubbleTapped(context: Context) {
@@ -140,7 +167,6 @@ object FloatingBubbleManager {
 
     private fun showFeedback(feedback: Feedback, resetToIdle: Boolean = true) {
         val label = labelView ?: return
-        val card = cardView ?: return
         val context = attachedContext ?: return
 
         resetRunnable?.let { handler.removeCallbacks(it) }
@@ -148,19 +174,19 @@ object FloatingBubbleManager {
         when (feedback) {
             Feedback.Syncing -> {
                 label.text = context.getString(R.string.bubble_label_syncing)
-                card.setCardBackgroundColor(ContextCompat.getColor(context, R.color.bubble_syncing))
+                setBubbleColor(R.color.bubble_syncing)
             }
             Feedback.Success -> {
                 label.text = context.getString(R.string.bubble_label_success)
-                card.setCardBackgroundColor(ContextCompat.getColor(context, R.color.bubble_success))
+                setBubbleColor(R.color.bubble_success)
             }
             Feedback.Duplicate -> {
                 label.text = context.getString(R.string.bubble_label_duplicate)
-                card.setCardBackgroundColor(ContextCompat.getColor(context, R.color.bubble_duplicate))
+                setBubbleColor(R.color.bubble_duplicate)
             }
             Feedback.NotLink, Feedback.Empty -> {
                 label.text = context.getString(R.string.bubble_label_invalid)
-                card.setCardBackgroundColor(ContextCompat.getColor(context, R.color.bubble_invalid))
+                setBubbleColor(R.color.bubble_invalid)
             }
         }
 
@@ -169,12 +195,25 @@ object FloatingBubbleManager {
         }
     }
 
+    private fun setBubbleColor(colorRes: Int) {
+        val context = attachedContext ?: return
+        val card = cardView ?: return
+        val color = ContextCompat.getColor(context, colorRes)
+        val stroke = ContextCompat.getColor(context, R.color.bubble_stroke)
+        val drawable = GradientDrawable().apply {
+            shape = GradientDrawable.OVAL
+            setColor(color)
+            setStroke((1 * context.resources.displayMetrics.density).toInt().coerceAtLeast(1), stroke)
+        }
+        card.background = drawable
+    }
+
     private fun resetToIdleDelayed() {
         resetRunnable?.let { handler.removeCallbacks(it) }
         val runnable = Runnable {
             val context = attachedContext ?: return@Runnable
             labelView?.text = context.getString(R.string.bubble_label_idle)
-            cardView?.setCardBackgroundColor(ContextCompat.getColor(context, R.color.bubble_background))
+            setBubbleColor(R.color.bubble_background)
         }
         resetRunnable = runnable
         handler.postDelayed(runnable, RESET_IDLE_MS)

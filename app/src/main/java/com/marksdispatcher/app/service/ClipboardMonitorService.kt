@@ -67,7 +67,9 @@ class ClipboardMonitorService : Service() {
         }
 
         startForeground(NOTIFICATION_ID, buildNotification(getString(R.string.notification_monitoring)))
-        FloatingBubbleManager.show(this)
+        if (!FloatingBubbleManager.show(this)) {
+            updateNotification(getString(R.string.notification_bubble_failed))
+        }
         serviceScope.launch {
             dispatchManager.retryPendingQueue()
         }

@@ -1,14 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/bubbleCard"
     android:layout_width="52dp"
     android:layout_height="52dp"
-    app:cardBackgroundColor="@color/bubble_background"
-    app:cardCornerRadius="26dp"
-    app:cardElevation="6dp"
-    app:strokeColor="@color/bubble_stroke"
-    app:strokeWidth="1dp">
+    android:background="@drawable/bubble_circle"
+    android:elevation="6dp">
 
     <TextView
         android:id="@+id/bubbleLabel"
@@ -20,4 +16,4 @@
         android:textSize="16sp"
         android:textStyle="bold" />
 
-</com.google.android.material.card.MaterialCardView>
+</FrameLayout>
